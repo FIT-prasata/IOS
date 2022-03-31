@@ -136,7 +136,7 @@ $READ_INPUT"
                     infected | merge | gender | age | daily | monthly | yearly | countries | districts | regions) COMMAND=$1;;
                 esac
                 if [[ -z $COMMAND ]]; then
-                    echo "Invalid command" 1<&2
+                    echo "Invalid command" 1>&2
                     exit 1
                 fi
             else
