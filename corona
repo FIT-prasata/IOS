@@ -146,14 +146,13 @@ $READ_INPUT"
         fi
         shift
     done
-
-    if [[ $FILES == "" ]]; then
-	echo "$FILE_TOP"
-	exit 0
-    fi
-
+    
     if [[ $FILES_NUM -eq 0 ]]; then
         FILES="$(cat)"
+	if [[ $FILES == "" ]]; then
+	    echo "$FILE_TOP"
+	    exit 0
+	fi
     fi
 }
 
