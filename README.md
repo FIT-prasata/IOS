@@ -1,5 +1,5 @@
 # IOS
-My solution to Operating Systems class projects on VUT FIT
+My solution to Operating Systems class projects at VUT FIT
 
 ## Project 1
 
