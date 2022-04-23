@@ -102,7 +102,17 @@ bool shm_ctor() {
 bool sem_dtor() {
 
     // Destroys semaphores
-    // TODO
+    if (
+        (
+            sem_destroy(hydro_sem) || \
+            sem_destroy(oxy_sem) || \
+            sem_destroy(mutex_sem) || \
+            sem_destroy(barrier_sem) \
+        ) == -1
+    ) {
+        fprintf(stderr, "Chyba pri uvolneni semaforu");
+        return false;
+    }
 }
 
 bool shm_dtor() {
@@ -175,6 +185,9 @@ int main(int argc, const char **argv) {
         fclose(file);
         exit(ERROR);
     }
+
+    if (sem_dtor() == false) { exit(ERROR); }
     fclose(file);
+    
     return 0;
 }
