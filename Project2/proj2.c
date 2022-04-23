@@ -6,6 +6,9 @@
 // Compiled: gcc (GCC) 9.2.0
 // Git repository: https://github.com/lukaszavadil1/IOS
 
+// TOTAL CAFFEINE CONSUMED - 260 mg
+// SHOT MYSELF IN THE FOOT COUNTER - lost track, way too many times
+
 // LOCAL INCLUDES
 #include "proj2.h"
 
@@ -36,6 +39,77 @@ bool process_input(int argc, const char **argv, args_t *args) {
     return true;
 }
 
+bool sem_ctor() {
+
+    // Allocates memory blocks for semaphores with validation
+    if (
+        (
+            hydro_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0) || \
+            oxy_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0) || \
+            mutex_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0) || \
+            barrier_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0) \
+        ) == MAP_FAILED 
+    ) {
+        fprintf(stderr, "Chyba pri mapovani pameti pro semafor");
+        return false;
+    }
+
+    // Initializes and validates semaphores
+    if (
+        (
+            sem_init(hydro_sem, 1, 0) || \
+            sem_init(oxy_sem, 1, 0) || \
+            sem_init(mutex_sem, 1, 1) || \
+            sem_init(barrier_sem, 1, 0) \
+        ) == -1
+    ) {
+        fprintf(stderr, "Chyba pri inicializaci semaforu");
+        return false
+    }
+
+    return true;
+}
+
+bool shm_ctor() {
+
+    // Allocates memory blocks for shared memory
+    if (
+        ( 
+            shared_A = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL) || \
+            shared_idO = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL) || \
+            shared_idH = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL) \
+        ) == -1
+    ) {
+        fprintf(stderr, "Chyba alokace pameti pro sdilene promenne");
+        return false;
+    }
+
+    // Maps allocated memory to address spaces of processes
+    if (
+        (
+            A = (int *) shmat(shared_A, NULL, 0) || \
+            idO = (int *) shmat(shared_idO, NULL, 0) || \
+            idH = (int *) shmat(shared_idH, NULL, 0) \
+        ) == NULL
+    ) {
+        fprintf(stderr, "Chyba mapovani sdilenych promennych");
+        return false
+    }
+
+    return true;
+}
+
+bool sem_dtor() {
+
+    // Destroys semaphores
+    // TODO
+}
+
+bool shm_dtor() {
+    // Frees shared memory
+    // TODO
+}
+
 int main(int argc, const char **argv) {
     args_t args;
     FILE *file;
@@ -43,32 +117,63 @@ int main(int argc, const char **argv) {
     pid_t oxy_childs[args.NO], hydro_childs[args.NH];
 
     // Arguments validation
-    if (process_input(argc, argv, &args) == false) {exit(1); }
+    if (process_input(argc, argv, &args) == false) {exit(ERROR); }
 
     // File validation
-    if ((file = fopen("proj2.exe", "w")) == NULL) {
+    if ((file = fopen("proj2.out", "w")) == NULL) {
         fprintf(stderr, "Chyba prace se souborem");
-        exit(1);
+        exit(ERROR);
+    }
+    setbuf(file, NULL);
+
+    // Semaphores and shared memory initialization
+    if ((sem_ctor() || shm_ctor()) == false) {
+        fclose(file);
+        exit(ERROR);
     }
 
     // Magic
     init = fork();
     if (init == 0) {
         for (size_t i = 0; i < args.NO; i++) {
-            // TODO
+            usleep(rand() % (args.TI + 1 - 0) + 0);
             oxy = fork();
+            if (oxy == 0) {
+                oxy_func(i, args);
+                exit(SUCCESS);
+            }
+            else if (oxy > 0) {
+                // TODO
+            }
+            else {
+                fprintf(stderr, "Chyba oxy forku");
+                fclose(file);
+                exit(ERROR);
+            }
         }
     }
     else if (init > 0) {
-        for (size_t j = 0; j < args.NH; j++) {
-            // TODO
+        for (size_t i = 0; i < args.NH; i++) {
+            usleep(rand() % (args.TI + 1 - 0) + 0);
             hydro = fork();
+            if (hydro == 0) {
+                hydro_func(i, args);
+                exit(SUCCESS);
+            }
+            else if (hydro > 0) {
+                // TODO
+            }
+            else {
+                fprintf(stderr, "Chyba hydro forku");
+                fclose(file);
+                exit(ERROR);
+            }
         }
     }
     else {
         fprintf(stderr, "Chyba init forku");
         fclose(file);
-        exit(1);
+        exit(ERROR);
     }
     fclose(file);
     return 0;
