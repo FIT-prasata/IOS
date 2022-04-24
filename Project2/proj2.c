@@ -6,7 +6,7 @@
 // Compiled: gcc (GCC) 9.2.0
 // Git repository: https://github.com/lukaszavadil1/IOS
 
-// TOTAL CAFFEINE CONSUMED - 260 mg
+// TOTAL CAFFEINE CONSUMED - 0,34g
 // SHOT MYSELF IN THE FOOT COUNTER - lost track, way too many times
 
 // LOCAL INCLUDES
@@ -99,6 +99,14 @@ bool shm_ctor() {
     return true;
 }
 
+void oxy_func(int p_num, args_t args) {
+    // TODO
+}
+
+void hydro_func(int p_num, args_t args) {
+    // TODO
+}
+
 bool sem_dtor() {
 
     // Destroys semaphores
@@ -110,14 +118,26 @@ bool sem_dtor() {
             sem_destroy(barrier_sem) \
         ) == -1
     ) {
-        fprintf(stderr, "Chyba pri uvolneni semaforu");
+        fprintf(stderr, "Chyba pri uvolnovani semaforu");
         return false;
     }
 }
 
 bool shm_dtor() {
-    // Frees shared memory
-    // TODO
+
+    // Destroys and detaches allocated memory segments
+    if (
+        (
+            shmctl(shared_A, IPC_RMID, NULL) || \
+            shmctl(shared_idO, IPC_RMID, NULL) || \
+            shmctl(shared_idH, IPC_RMID, NULL) || \
+            shmdt(A) || \
+            shmdt(idO) || \
+            shmdt(idH) \
+        ) == -1
+    ) {
+        fprintf(stderr, "Chyba pri uvolnovani sdilene pameti")
+    }
 }
 
 int main(int argc, const char **argv) {
@@ -152,17 +172,27 @@ int main(int argc, const char **argv) {
                 oxy_func(i, args);
                 exit(SUCCESS);
             }
-            else if (oxy > 0) {
-                // TODO
-            }
-            else {
+            else if (oxy == -1) {
                 fprintf(stderr, "Chyba oxy forku");
                 fclose(file);
                 exit(ERROR);
             }
+            else {
+                oxy_childs[i] = oxy;
+            }
+        }
+        
+        // Wait for oxy childs
+        for (size_t i = 0; i < args.NO; i++) {
+            waitpid(oxy_childs[i], NULL, 0);
         }
     }
-    else if (init > 0) {
+    else if (init == -1) {
+        fprintf(stderr, "Chyba init forku");
+        fclose(file);
+        exit(ERROR);
+    }
+    else {
         for (size_t i = 0; i < args.NH; i++) {
             usleep(rand() % (args.TI + 1 - 0) + 0);
             hydro = fork();
@@ -170,24 +200,24 @@ int main(int argc, const char **argv) {
                 hydro_func(i, args);
                 exit(SUCCESS);
             }
-            else if (hydro > 0) {
-                // TODO
-            }
-            else {
+            else if (hydro == -1) {
                 fprintf(stderr, "Chyba hydro forku");
                 fclose(file);
                 exit(ERROR);
             }
+            else {
+                hydro_childs[i] = hydro;
+            }
         }
-    }
-    else {
-        fprintf(stderr, "Chyba init forku");
-        fclose(file);
-        exit(ERROR);
+
+        // Wait for hydro childs
+        for (size_t i = 0; i < args.NH; i++) {
+            waitpid(hydro_childs[i], NULL, 0);
+        }
     }
 
     if (sem_dtor() == false) { exit(ERROR); }
     fclose(file);
-    
+
     return 0;
 }

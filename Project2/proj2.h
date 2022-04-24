@@ -21,6 +21,7 @@
 #include <sys/mman.h>
 #include <sys/shm.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 // TYPEDEFS, STRUCTS AND DEFINES
 typedef struct args {
@@ -37,6 +38,8 @@ typedef struct args {
 bool process_input(int argc, const char **argv, args_t *args);
 bool sem_ctor();
 bool shm_ctor();
+void oxy_func(int p_num, args_t args);
+void hydro_func(int p_num, args_t args);
 bool sem_dtor();
 bool shm_dtor();
 
