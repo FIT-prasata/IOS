@@ -43,12 +43,11 @@ bool sem_ctor() {
 
     // Allocates memory blocks for semaphores with validation
     if (
-        (
-            hydro_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0) || \
-            oxy_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0) || \
-            mutex_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0) || \
-            barrier_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0) \
-        ) == MAP_FAILED 
+        (hydro_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (oxy_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (mutex_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (barrier_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (print_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED
     ) {
         fprintf(stderr, "Chyba pri mapovani pameti pro semafor");
         return false;
@@ -56,15 +55,14 @@ bool sem_ctor() {
 
     // Initializes and validates semaphores
     if (
-        (
-            sem_init(hydro_sem, 1, 0) || \
-            sem_init(oxy_sem, 1, 0) || \
-            sem_init(mutex_sem, 1, 1) || \
-            sem_init(barrier_sem, 1, 0) \
-        ) == -1
+        sem_init(hydro_sem, 1, 0) == -1 || \
+        sem_init(oxy_sem, 1, 0) == -1 || \
+        sem_init(mutex_sem, 1, 1) == -1 || \
+        sem_init(barrier_sem, 1, 0) == -1 || \
+        sem_init(print_sem, 1, 1) == -1
     ) {
         fprintf(stderr, "Chyba pri inicializaci semaforu");
-        return false
+        return false;
     }
 
     return true;
@@ -74,11 +72,9 @@ bool shm_ctor() {
 
     // Allocates memory blocks for shared memory
     if (
-        ( 
-            shared_A = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL) || \
-            shared_idO = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL) || \
-            shared_idH = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL) \
-        ) == -1
+        (shared_counter = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1 || \
+        (shared_idO = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1 || \
+        (shared_idH = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1
     ) {
         fprintf(stderr, "Chyba alokace pameti pro sdilene promenne");
         return false;
@@ -86,68 +82,83 @@ bool shm_ctor() {
 
     // Maps allocated memory to address spaces of processes
     if (
-        (
-            A = (int *) shmat(shared_A, NULL, 0) || \
-            idO = (int *) shmat(shared_idO, NULL, 0) || \
-            idH = (int *) shmat(shared_idH, NULL, 0) \
-        ) == NULL
+        (counter = (int *) shmat(shared_counter, NULL, 0)) == NULL || \
+        (idO = (int *) shmat(shared_idO, NULL, 0)) == NULL || \
+        (idH = (int *) shmat(shared_idH, NULL, 0)) == NULL
     ) {
         fprintf(stderr, "Chyba mapovani sdilenych promennych");
-        return false
+        return false;
     }
 
     return true;
 }
 
 void oxy_func(int p_num, args_t args) {
-    // TODO
+
+    // Process started print
+    sem_wait(print_sem);
+    fprintf(file,"%d: O %d: started\n", *counter, p_num);
+    *counter++;
+    sem_post(print_sem);
+
+    sem_wait(mutex_sem);
+    sem_post(mutex_sem);
 }
 
 void hydro_func(int p_num, args_t args) {
-    // TODO
+
+    // Process started print
+    sem_wait(print_sem);
+    fprintf(file,"%d: H %d: started\n", *counter, p_num);
+    *counter++;
+    sem_post(print_sem);
+
+    sem_wait(mutex_sem);
+    sem_post(mutex_sem);
 }
 
 bool sem_dtor() {
 
     // Destroys semaphores
     if (
-        (
-            sem_destroy(hydro_sem) || \
-            sem_destroy(oxy_sem) || \
-            sem_destroy(mutex_sem) || \
-            sem_destroy(barrier_sem) \
-        ) == -1
+        sem_destroy(hydro_sem) == -1 || \
+        sem_destroy(oxy_sem) == -1 || \
+        sem_destroy(mutex_sem) == -1 || \
+        sem_destroy(barrier_sem) == -1 || \
+        sem_destroy(print_sem) == -1
     ) {
         fprintf(stderr, "Chyba pri uvolnovani semaforu");
         return false;
     }
+
+    return true;
 }
 
 bool shm_dtor() {
 
     // Destroys and detaches allocated memory segments
     if (
-        (
-            shmctl(shared_A, IPC_RMID, NULL) || \
-            shmctl(shared_idO, IPC_RMID, NULL) || \
-            shmctl(shared_idH, IPC_RMID, NULL) || \
-            shmdt(A) || \
-            shmdt(idO) || \
-            shmdt(idH) \
-        ) == -1
+        shmctl(shared_counter, IPC_RMID, NULL) == -1 || \
+        shmctl(shared_idO, IPC_RMID, NULL) == -1 || \
+        shmctl(shared_idH, IPC_RMID, NULL) == -1 || \
+        shmdt(counter) == -1 || \
+        shmdt(idO) == -1|| \
+        shmdt(idH) == -1 \
     ) {
-        fprintf(stderr, "Chyba pri uvolnovani sdilene pameti")
+        fprintf(stderr, "Chyba pri uvolnovani sdilene pameti");
     }
+
+    return true;
 }
 
 int main(int argc, const char **argv) {
     args_t args;
-    FILE *file;
-    pid_t init, oxy, hydro;
-    pid_t oxy_childs[args.NO], hydro_childs[args.NH];
 
     // Arguments validation
     if (process_input(argc, argv, &args) == false) {exit(ERROR); }
+
+    pid_t init, oxy, hydro;
+    pid_t oxy_childs[args.NO], hydro_childs[args.NH];
 
     // File validation
     if ((file = fopen("proj2.out", "w")) == NULL) {
@@ -165,7 +176,7 @@ int main(int argc, const char **argv) {
     // Magic
     init = fork();
     if (init == 0) {
-        for (size_t i = 0; i < args.NO; i++) {
+        for (int i = 0; i < args.NO; i++) {
             usleep(rand() % (args.TI + 1 - 0) + 0);
             oxy = fork();
             if (oxy == 0) {
@@ -183,7 +194,7 @@ int main(int argc, const char **argv) {
         }
         
         // Wait for oxy childs
-        for (size_t i = 0; i < args.NO; i++) {
+        for (int i = 0; i < args.NO; i++) {
             waitpid(oxy_childs[i], NULL, 0);
         }
     }
@@ -193,7 +204,7 @@ int main(int argc, const char **argv) {
         exit(ERROR);
     }
     else {
-        for (size_t i = 0; i < args.NH; i++) {
+        for (int i = 0; i < args.NH; i++) {
             usleep(rand() % (args.TI + 1 - 0) + 0);
             hydro = fork();
             if (hydro == 0) {
@@ -211,7 +222,7 @@ int main(int argc, const char **argv) {
         }
 
         // Wait for hydro childs
-        for (size_t i = 0; i < args.NH; i++) {
+        for (int i = 0; i < args.NH; i++) {
             waitpid(hydro_childs[i], NULL, 0);
         }
     }
