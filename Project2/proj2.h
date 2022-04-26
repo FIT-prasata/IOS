@@ -54,4 +54,6 @@ sem_t *hydro_sem, *oxy_sem, *mutex_sem, *barrier_sem, *print_sem;
 
 FILE *file;
 
+#define UNUSED(x) (void) (x) 
+
 #endif

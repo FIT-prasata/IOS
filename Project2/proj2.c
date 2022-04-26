@@ -90,16 +90,23 @@ bool shm_ctor() {
         return false;
     }
 
+    *counter = 0;
+    *idO = 0;
+    *idH = 0;
+
+    printf("Counter: %d, idO: %d, idH: %d\n", *counter, *idO, *idH);
+
     return true;
 }
 
 void oxy_func(int p_num, args_t args) {
 
-    // Process started print
+    //Process started print
+    UNUSED(args);
     sem_wait(print_sem);
-    fprintf(file,"%d: O %d: started\n", *counter, p_num);
-    *counter++;
+    printf("%d: O %d: started\n", ++(*counter), ++p_num);
     sem_post(print_sem);
+    usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
 
     sem_wait(mutex_sem);
     sem_post(mutex_sem);
@@ -107,11 +114,12 @@ void oxy_func(int p_num, args_t args) {
 
 void hydro_func(int p_num, args_t args) {
 
-    // Process started print
+    //Process started print
+    UNUSED(args);
     sem_wait(print_sem);
-    fprintf(file,"%d: H %d: started\n", *counter, p_num);
-    *counter++;
+    printf("%d: H %d: started\n", ++(*counter), ++p_num);
     sem_post(print_sem);
+    usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
 
     sem_wait(mutex_sem);
     sem_post(mutex_sem);
@@ -168,7 +176,7 @@ int main(int argc, const char **argv) {
     setbuf(file, NULL);
 
     // Semaphores and shared memory initialization
-    if ((sem_ctor() || shm_ctor()) == false) {
+    if ((sem_ctor() == false) || (shm_ctor() == false)) {
         fclose(file);
         exit(ERROR);
     }
@@ -205,7 +213,6 @@ int main(int argc, const char **argv) {
     }
     else {
         for (int i = 0; i < args.NH; i++) {
-            usleep(rand() % (args.TI + 1 - 0) + 0);
             hydro = fork();
             if (hydro == 0) {
                 hydro_func(i, args);
@@ -227,7 +234,7 @@ int main(int argc, const char **argv) {
         }
     }
 
-    if (sem_dtor() == false) { exit(ERROR); }
+    if ((sem_dtor() == false) || (shm_dtor() == false)) { exit(ERROR); }
     fclose(file);
 
     return 0;
