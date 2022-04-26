@@ -9,4 +9,3 @@ Shell script for analyzing COVID-19 cases in Czech republic
 
 Dihydrogen oxide synthesis process synchronization program
 
-ahoj test
