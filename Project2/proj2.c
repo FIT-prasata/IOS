@@ -6,8 +6,12 @@
 // Compiled: gcc (GCC) 9.2.0
 // Git repository: https://github.com/lukaszavadil1/IOS
 
-// TOTAL CAFFEINE CONSUMED - 0,34g
-// SHOT MYSELF IN THE FOOT COUNTER - lost track, way too many times
+// TOTAL CAFFEINE CONSUMED - 0,64g
+// HOPELESS CRYING IN THE SHOWER COUNTER - 4x
+// PROCESSES THAT ESCAPED TO THE WILD AND WILL NEVER BE FOUND - way too many
+// SEMAPHORES THAT WILL NEVER SIGNAL AGAIN - dozens
+// SHARED MEMORY COMPLETELY LOST - a lot
+// DEADLOCKS EXPLORED - 2
 
 // LOCAL INCLUDES
 #include "proj2.h"
@@ -44,7 +48,10 @@ bool sem_ctor() {
     // Allocates memory blocks for semaphores with validation
     if (
         (print_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
-        (queue_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED
+        (queue_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (hydro_queue = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (oxy_queue = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED
+
     ) {
         fprintf(stderr, "Chyba pri mapovani pameti pro semafor");
         return false;
@@ -53,7 +60,9 @@ bool sem_ctor() {
     // Initializes and validates semaphores
     if (
         sem_init(print_mutex, 1, 1) == -1 || \
-        sem_init(queue_mutex, 1, 1) == -1
+        sem_init(queue_mutex, 1, 1) == -1 || \
+        sem_init(hydro_queue, 1, 0) == -1 || \
+        sem_init(oxy_queue, 1, 0) == -1
     ) {
         fprintf(stderr, "Chyba pri inicializaci semaforu");
         return false;
@@ -68,7 +77,8 @@ bool shm_ctor() {
     if (
         (shared_counter = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1 || \
         (shared_idO = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1 || \
-        (shared_idH = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1
+        (shared_idH = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1 || \
+        (shared_noM = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1
     ) {
         fprintf(stderr, "Chyba alokace pameti pro sdilene promenne");
         return false;
@@ -78,7 +88,8 @@ bool shm_ctor() {
     if (
         (counter = (int *) shmat(shared_counter, NULL, 0)) == NULL || \
         (idO = (int *) shmat(shared_idO, NULL, 0)) == NULL || \
-        (idH = (int *) shmat(shared_idH, NULL, 0)) == NULL
+        (idH = (int *) shmat(shared_idH, NULL, 0)) == NULL || \
+        (noM = (int *) shmat(shared_noM, NULL, 0)) == NULL
     ) {
         fprintf(stderr, "Chyba mapovani sdilenych promennych");
         return false;
@@ -87,8 +98,9 @@ bool shm_ctor() {
     *counter = 0;
     *idO = 0;
     *idH = 0;
+    *noM = 0;
 
-    printf("Counter: %d, idO: %d, idH: %d\n", *counter, *idO, *idH);
+    printf("Counter: %d, idO: %d, idH: %d, noM: %d\n", *counter, *idO, *idH, *noM);
 
     return true;
 }
@@ -100,11 +112,34 @@ void oxy_func(int p_num, args_t args) {
     sem_wait(print_mutex);
     printf("%d: O %d: started\n", ++(*counter), p_num + 1);
     sem_post(print_mutex);
-    usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
 
     sem_wait(queue_mutex);
-    printf("%d: H %d: going to queue\n", ++(*counter), p_num + 1);
-    sem_post(queue_mutex);
+    usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
+    printf("%d: O %d: going to queue\n", ++(*counter), p_num + 1);
+    (*idO)++;
+
+    if (*idH >= 2 && *idO >= 1) {
+
+        sem_post(hydro_queue);
+        sem_post(hydro_queue);
+        (*idH)--;
+        (*idH)--;
+        sem_post(oxy_queue);
+        (*idO)--;
+
+        sem_wait(print_mutex);
+        usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
+        printf("%d: O %d: creating molecule %d\n", ++(*counter), p_num + 1, ++(*noM));
+        sem_post(print_mutex);
+    }
+
+    else {
+        sem_post(queue_mutex);
+    }
+
+    sem_wait(oxy_queue);
+    
+    // TODO bond()
 }
 
 void hydro_func(int p_num, args_t args) {
@@ -114,11 +149,34 @@ void hydro_func(int p_num, args_t args) {
     sem_wait(print_mutex);
     printf("%d: H %d: started\n", ++(*counter), p_num + 1);
     sem_post(print_mutex);
-    usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
 
     sem_wait(queue_mutex);
+    usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
     printf("%d: H %d: going to queue\n", ++(*counter), p_num + 1);
-    sem_post(queue_mutex);
+    (*idH)++;
+
+    if (*idH >= 2 && *idO >= 1) {
+
+        sem_post(hydro_queue);
+        sem_post(hydro_queue);
+        (*idH)--;
+        (*idH)--;
+        sem_post(oxy_queue);
+        (*idO)--;
+
+        sem_wait(print_mutex);
+        usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
+        printf("%d: H %d: creating molecule %d\n", ++(*counter), p_num + 1, ++(*noM));
+        sem_post(print_mutex);
+    }
+
+    else {
+        sem_post(queue_mutex);
+    }
+
+    sem_wait(hydro_queue);
+    
+    // TODO bond()
 }
 
 bool sem_dtor() {
@@ -126,7 +184,9 @@ bool sem_dtor() {
     // Destroys semaphores
     if (
         sem_destroy(print_mutex) == -1 || \
-        sem_destroy(queue_mutex) == -1
+        sem_destroy(queue_mutex) == -1 || \
+        sem_destroy(hydro_queue) == -1 || \
+        sem_destroy(oxy_queue) == -1
     ) {
         fprintf(stderr, "Chyba pri uvolnovani semaforu");
         return false;
@@ -142,9 +202,11 @@ bool shm_dtor() {
         shmctl(shared_counter, IPC_RMID, NULL) == -1 || \
         shmctl(shared_idO, IPC_RMID, NULL) == -1 || \
         shmctl(shared_idH, IPC_RMID, NULL) == -1 || \
+        shmctl(shared_noM, IPC_RMID, NULL) == -1 || \
         shmdt(counter) == -1 || \
         shmdt(idO) == -1|| \
-        shmdt(idH) == -1 \
+        shmdt(idH) == -1 || \
+        shmdt(noM) == -1
     ) {
         fprintf(stderr, "Chyba pri uvolnovani sdilene pameti");
     }
