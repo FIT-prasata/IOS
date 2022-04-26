@@ -43,11 +43,8 @@ bool sem_ctor() {
 
     // Allocates memory blocks for semaphores with validation
     if (
-        (hydro_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
-        (oxy_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
-        (mutex_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
-        (barrier_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
-        (print_sem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED
+        (print_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (queue_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED
     ) {
         fprintf(stderr, "Chyba pri mapovani pameti pro semafor");
         return false;
@@ -55,11 +52,8 @@ bool sem_ctor() {
 
     // Initializes and validates semaphores
     if (
-        sem_init(hydro_sem, 1, 0) == -1 || \
-        sem_init(oxy_sem, 1, 0) == -1 || \
-        sem_init(mutex_sem, 1, 1) == -1 || \
-        sem_init(barrier_sem, 1, 0) == -1 || \
-        sem_init(print_sem, 1, 1) == -1
+        sem_init(print_mutex, 1, 1) == -1 || \
+        sem_init(queue_mutex, 1, 1) == -1
     ) {
         fprintf(stderr, "Chyba pri inicializaci semaforu");
         return false;
@@ -102,38 +96,37 @@ bool shm_ctor() {
 void oxy_func(int p_num, args_t args) {
 
     //Process started print
-    UNUSED(args);
-    sem_wait(print_sem);
-    printf("%d: O %d: started\n", ++(*counter), ++p_num);
-    sem_post(print_sem);
+    srand(getpid());
+    sem_wait(print_mutex);
+    printf("%d: O %d: started\n", ++(*counter), p_num + 1);
+    sem_post(print_mutex);
     usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
 
-    sem_wait(mutex_sem);
-    sem_post(mutex_sem);
+    sem_wait(queue_mutex);
+    printf("%d: H %d: going to queue\n", ++(*counter), p_num + 1);
+    sem_post(queue_mutex);
 }
 
 void hydro_func(int p_num, args_t args) {
 
     //Process started print
-    UNUSED(args);
-    sem_wait(print_sem);
-    printf("%d: H %d: started\n", ++(*counter), ++p_num);
-    sem_post(print_sem);
+    srand(getpid());
+    sem_wait(print_mutex);
+    printf("%d: H %d: started\n", ++(*counter), p_num + 1);
+    sem_post(print_mutex);
     usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
 
-    sem_wait(mutex_sem);
-    sem_post(mutex_sem);
+    sem_wait(queue_mutex);
+    printf("%d: H %d: going to queue\n", ++(*counter), p_num + 1);
+    sem_post(queue_mutex);
 }
 
 bool sem_dtor() {
 
     // Destroys semaphores
     if (
-        sem_destroy(hydro_sem) == -1 || \
-        sem_destroy(oxy_sem) == -1 || \
-        sem_destroy(mutex_sem) == -1 || \
-        sem_destroy(barrier_sem) == -1 || \
-        sem_destroy(print_sem) == -1
+        sem_destroy(print_mutex) == -1 || \
+        sem_destroy(queue_mutex) == -1
     ) {
         fprintf(stderr, "Chyba pri uvolnovani semaforu");
         return false;

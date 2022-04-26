@@ -50,7 +50,7 @@ int shared_counter, shared_idO, shared_idH;
 int *counter, *idO, *idH;
 
 // SEMAPHORES
-sem_t *hydro_sem, *oxy_sem, *mutex_sem, *barrier_sem, *print_sem;
+sem_t *print_mutex, *queue_mutex;
 
 FILE *file;
 
