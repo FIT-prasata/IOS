@@ -44,13 +44,13 @@ bool sem_dtor();
 bool shm_dtor();
 
 // SHARED MEMORY VARIABLES 
-int shared_counter, shared_idO, shared_idH, shared_noM;
+int shared_line_counter, shared_idO, shared_idH, shared_noM, shared_atom_counter;
 
 // VARIABLES
-int *counter, *idO, *idH, *noM;
+int *line_counter, *idO, *idH, *noM, *atom_counter;
 
 // SEMAPHORES
-sem_t *print_mutex, *queue_mutex, *hydro_queue, *oxy_queue;
+sem_t *print_mutex, *queue_mutex, *hydro_queue, *oxy_queue, *barrier, *barrier_mutex, *protect_mutex;
 
 FILE *file;
 

@@ -50,7 +50,10 @@ bool sem_ctor() {
         (print_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
         (queue_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
         (hydro_queue = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
-        (oxy_queue = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED
+        (oxy_queue = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (barrier = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (barrier_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (protect_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED
 
     ) {
         fprintf(stderr, "Chyba pri mapovani pameti pro semafor");
@@ -62,7 +65,10 @@ bool sem_ctor() {
         sem_init(print_mutex, 1, 1) == -1 || \
         sem_init(queue_mutex, 1, 1) == -1 || \
         sem_init(hydro_queue, 1, 0) == -1 || \
-        sem_init(oxy_queue, 1, 0) == -1
+        sem_init(oxy_queue, 1, 0) == -1 || \
+        sem_init(barrier, 1, 0) == -1 || \
+        sem_init(barrier_mutex, 1, 1) == -1 || \
+        sem_init(protect_mutex, 1, 1) == -1
     ) {
         fprintf(stderr, "Chyba pri inicializaci semaforu");
         return false;
@@ -75,10 +81,11 @@ bool shm_ctor() {
 
     // Allocates memory blocks for shared memory
     if (
-        (shared_counter = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1 || \
+        (shared_line_counter = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1 || \
         (shared_idO = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1 || \
         (shared_idH = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1 || \
-        (shared_noM = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1
+        (shared_noM = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1 || \
+        (shared_atom_counter = shmget(IPC_PRIVATE, sizeof(int), 0644 | IPC_CREAT | IPC_EXCL)) == -1
     ) {
         fprintf(stderr, "Chyba alokace pameti pro sdilene promenne");
         return false;
@@ -86,21 +93,23 @@ bool shm_ctor() {
 
     // Maps allocated memory to address spaces of processes
     if (
-        (counter = (int *) shmat(shared_counter, NULL, 0)) == NULL || \
+        (line_counter = (int *) shmat(shared_line_counter, NULL, 0)) == NULL || \
         (idO = (int *) shmat(shared_idO, NULL, 0)) == NULL || \
         (idH = (int *) shmat(shared_idH, NULL, 0)) == NULL || \
-        (noM = (int *) shmat(shared_noM, NULL, 0)) == NULL
+        (noM = (int *) shmat(shared_noM, NULL, 0)) == NULL || \
+        (atom_counter = (int *) shmat(shared_atom_counter, NULL, 0)) == NULL
     ) {
         fprintf(stderr, "Chyba mapovani sdilenych promennych");
         return false;
     }
 
-    *counter = 0;
+    *line_counter = 0;
     *idO = 0;
     *idH = 0;
     *noM = 0;
+    *atom_counter = 0;
 
-    printf("Counter: %d, idO: %d, idH: %d, noM: %d\n", *counter, *idO, *idH, *noM);
+    printf("line_counter: %d, idO: %d, idH: %d, noM: %d, atom_counter: %d\n", *line_counter, *idO, *idH, *noM, *atom_counter);
 
     return true;
 }
@@ -108,14 +117,14 @@ bool shm_ctor() {
 void oxy_func(int p_num, args_t args) {
 
     //Process started print
-    srand(getpid());
+    srand(time(NULL) *getpid());
     sem_wait(print_mutex);
-    printf("%d: O %d: started\n", ++(*counter), p_num + 1);
+    printf("%d: O %d: started\n", ++(*line_counter), p_num + 1);
     sem_post(print_mutex);
 
     sem_wait(queue_mutex);
     usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
-    printf("%d: O %d: going to queue\n", ++(*counter), p_num + 1);
+    printf("%d: O %d: going to queue\n", ++(*line_counter), p_num + 1);
     (*idO)++;
 
     if (*idH >= 2 && *idO >= 1) {
@@ -129,7 +138,7 @@ void oxy_func(int p_num, args_t args) {
 
         sem_wait(print_mutex);
         usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
-        printf("%d: O %d: creating molecule %d\n", ++(*counter), p_num + 1, ++(*noM));
+        printf("%d: O %d: creating molecule %d\n", ++(*line_counter), p_num + 1, ++(*noM));
         sem_post(print_mutex);
     }
 
@@ -138,21 +147,48 @@ void oxy_func(int p_num, args_t args) {
     }
 
     sem_wait(oxy_queue);
+
+    sem_wait(barrier_mutex);
+    (*atom_counter)++;
+    if (*atom_counter == 3){
+        sem_wait(protect_mutex);
+        sem_post(barrier);
+    }
+    sem_post(barrier_mutex);
+
+    sem_wait(barrier);
+    sem_post(barrier);
+
+    sem_wait(print_mutex);
+        printf("%d: O %d: molecule %d created\n", ++(*line_counter), p_num + 1, (*noM));
+    sem_post(print_mutex);
     
-    // TODO bond()
+    sem_wait(barrier_mutex);
+    (*atom_counter)--;
+    if (*atom_counter == 0){
+        sem_wait(barrier);
+        sem_post(protect_mutex);
+    }
+
+    sem_post(barrier_mutex);
+
+    sem_wait(protect_mutex);
+    sem_post(protect_mutex);
+
+    sem_post(queue_mutex);
 }
 
 void hydro_func(int p_num, args_t args) {
 
     //Process started print
-    srand(getpid());
+    srand(time(NULL) *getpid());
     sem_wait(print_mutex);
-    printf("%d: H %d: started\n", ++(*counter), p_num + 1);
+    printf("%d: H %d: started\n", ++(*line_counter), p_num + 1);
     sem_post(print_mutex);
 
     sem_wait(queue_mutex);
     usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
-    printf("%d: H %d: going to queue\n", ++(*counter), p_num + 1);
+    printf("%d: H %d: going to queue\n", ++(*line_counter), p_num + 1);
     (*idH)++;
 
     if (*idH >= 2 && *idO >= 1) {
@@ -166,7 +202,7 @@ void hydro_func(int p_num, args_t args) {
 
         sem_wait(print_mutex);
         usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
-        printf("%d: H %d: creating molecule %d\n", ++(*counter), p_num + 1, ++(*noM));
+        printf("%d: H %d: creating molecule %d\n", ++(*line_counter), p_num + 1, ++(*noM));
         sem_post(print_mutex);
     }
 
@@ -175,8 +211,34 @@ void hydro_func(int p_num, args_t args) {
     }
 
     sem_wait(hydro_queue);
+
+    sem_wait(barrier_mutex);
+    (*atom_counter)++;
+    if (*atom_counter == 3){
+        sem_wait(protect_mutex);
+        sem_post(barrier);
+    }
+    sem_post(barrier_mutex);
+
+    sem_wait(barrier);
+    sem_post(barrier);
+
+    sem_wait(print_mutex);
+        printf("%d: H %d: molecule %d created\n", ++(*line_counter), p_num + 1, (*noM));
+    sem_post(print_mutex);
+
+    sem_wait(barrier_mutex);
+    (*atom_counter)--;
+    if (*atom_counter == 0){
+        sem_wait(barrier);
+        sem_post(protect_mutex);
+    }
+
+    sem_post(barrier_mutex);
+
+    sem_wait(protect_mutex);
+    sem_post(protect_mutex);
     
-    // TODO bond()
 }
 
 bool sem_dtor() {
@@ -186,7 +248,10 @@ bool sem_dtor() {
         sem_destroy(print_mutex) == -1 || \
         sem_destroy(queue_mutex) == -1 || \
         sem_destroy(hydro_queue) == -1 || \
-        sem_destroy(oxy_queue) == -1
+        sem_destroy(oxy_queue) == -1 || \
+        sem_destroy(barrier) == -1 || \
+        sem_destroy(barrier_mutex) == -1 || \
+        sem_destroy(protect_mutex) == -1
     ) {
         fprintf(stderr, "Chyba pri uvolnovani semaforu");
         return false;
@@ -199,14 +264,16 @@ bool shm_dtor() {
 
     // Destroys and detaches allocated memory segments
     if (
-        shmctl(shared_counter, IPC_RMID, NULL) == -1 || \
+        shmctl(shared_line_counter, IPC_RMID, NULL) == -1 || \
         shmctl(shared_idO, IPC_RMID, NULL) == -1 || \
         shmctl(shared_idH, IPC_RMID, NULL) == -1 || \
         shmctl(shared_noM, IPC_RMID, NULL) == -1 || \
-        shmdt(counter) == -1 || \
+        shmctl(shared_atom_counter, IPC_RMID, NULL) == -1 || \
+        shmdt(line_counter) == -1 || \
         shmdt(idO) == -1|| \
         shmdt(idH) == -1 || \
-        shmdt(noM) == -1
+        shmdt(noM) == -1 || \
+        shmdt(atom_counter) == -1
     ) {
         fprintf(stderr, "Chyba pri uvolnovani sdilene pameti");
     }
@@ -240,7 +307,6 @@ int main(int argc, const char **argv) {
     init = fork();
     if (init == 0) {
         for (int i = 0; i < args.NO; i++) {
-            usleep(rand() % (args.TI + 1 - 0) + 0);
             oxy = fork();
             if (oxy == 0) {
                 oxy_func(i, args);
