@@ -4,7 +4,7 @@ CFLAGS=-std=gnu99 -Wall -Wextra -Werror -pedantic -pthread
 all: proj2
 
 run: proj2
-	./proj2 10 20 1 1
+	./proj2 10 20 100 100
 	cat proj2.out
 
 # GENERATE .o FILES
@@ -20,7 +20,4 @@ proj2: proj2.o
 # DELETE ALL .o FILES AND EXECUTABLE
 
 clean:
-	rm *.o proj2
-
-win-clean:
-	del *.o proj2.exe
+	rm *.o proj2 proj2.out

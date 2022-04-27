@@ -6,12 +6,12 @@
 // Compiled: gcc (GCC) 9.2.0
 // Git repository: https://github.com/lukaszavadil1/IOS
 
-// TOTAL CAFFEINE CONSUMED - 0,64g
+// TOTAL CAFFEINE CONSUMED - 0,84g
 // HOPELESS CRYING IN THE SHOWER COUNTER - 4x
 // PROCESSES THAT ESCAPED TO THE WILD AND WILL NEVER BE FOUND - way too many
 // SEMAPHORES THAT WILL NEVER SIGNAL AGAIN - dozens
 // SHARED MEMORY COMPLETELY LOST - a lot
-// DEADLOCKS EXPLORED - 2
+// DEADLOCKS EXPLORED - 7
 
 // LOCAL INCLUDES
 #include "proj2.h"
@@ -117,42 +117,59 @@ bool shm_ctor() {
 
 void oxy_func(int p_num, args_t args) {
 
-    //Process started print
+    // Generate random seed
     srand(time(NULL) *getpid());
+
+    // Started state print
     sem_wait(print_mutex);
     fprintf(file, "%d: O %d: started\n", ++(*line_counter), p_num + 1);
     fflush(file);
     sem_post(print_mutex);
 
-    sem_wait(queue_mutex);
+    // Sleep before joining queue
     usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
+
+    // Going to queue state print
+    sem_wait(queue_mutex);
     fprintf(file, "%d: O %d: going to queue\n", ++(*line_counter), p_num + 1);
     fflush(file);
     sem_post(queue_mutex);
 
+    // Main mutex
     sem_wait(mutex);
+
     (*idO)++;
 
+    // Check the queue for two H and one O atoms
     if (*idH >= 2 && *idO >= 1) {
 
+        // Release two H atoms from the front of a queue
         sem_post(hydro_queue);
         sem_post(hydro_queue);
         (*idH)--;
         (*idH)--;
+
+        // Release one O atom from the front of a queue
         sem_post(oxy_queue);
         (*idO)--;
 
+        // Creating molecule state print
         sem_wait(print_mutex);
-        usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
         fprintf(file, "%d: O %d: creating molecule %d\n", ++(*line_counter), p_num + 1, ++(*noM));
         fflush(file);
         sem_post(print_mutex);
+
+        // Sleep after creating molecule
+        usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
     }
 
     else {
+
+        // Release another atom
         sem_post(mutex);
     }
 
+    // Queue of oxygens
     sem_wait(oxy_queue);
 
     sem_wait(barrier_mutex);
@@ -188,42 +205,59 @@ void oxy_func(int p_num, args_t args) {
 
 void hydro_func(int p_num, args_t args) {
 
-    //Process started print
+    // Generate random seed
     srand(time(NULL) *getpid());
+
+    // Started state print
     sem_wait(print_mutex);
     fprintf(file, "%d: H %d: started\n", ++(*line_counter), p_num + 1);
     fflush(file);
     sem_post(print_mutex);
 
-    sem_wait(queue_mutex);
+    // Sleep before joining queue
     usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
+
+    // Going to queue state print
+    sem_wait(queue_mutex);
     fprintf(file, "%d: H %d: going to queue\n", ++(*line_counter), p_num + 1);
     fflush(file);
     sem_post(queue_mutex);
 
+    // Main mutex
     sem_wait(mutex);
+    
     (*idH)++;
 
+    // Check the queue for two H and one O atoms
     if (*idH >= 2 && *idO >= 1) {
 
+        // Release two H atoms from the front of a queue
         sem_post(hydro_queue);
         sem_post(hydro_queue);
         (*idH)--;
         (*idH)--;
+
+        // Release one O atom from the front of a queue
         sem_post(oxy_queue);
         (*idO)--;
 
+        // Creating molecule state print
         sem_wait(print_mutex);
-        usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
         fprintf(file, "%d: H %d: creating molecule %d\n", ++(*line_counter), p_num + 1, ++(*noM));
         fflush(file);
         sem_post(print_mutex);
+
+        // Sleep after creating molecule
+        usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
     }
 
     else {
+
+        // Release another atom
         sem_post(mutex);
     }
 
+    // Queue of hydrogens
     sem_wait(hydro_queue);
 
     sem_wait(barrier_mutex);
