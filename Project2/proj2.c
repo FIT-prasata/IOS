@@ -48,13 +48,13 @@ bool sem_ctor() {
     // Allocates memory blocks for semaphores with validation
     if (
         (print_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
-        (queue_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
         (hydro_queue = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
         (oxy_queue = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
         (barrier = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
         (barrier_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
-        (protect_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED
-
+        (protect_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (queue_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED
     ) {
         fprintf(stderr, "Chyba pri mapovani pameti pro semafor");
         return false;
@@ -63,12 +63,13 @@ bool sem_ctor() {
     // Initializes and validates semaphores
     if (
         sem_init(print_mutex, 1, 1) == -1 || \
-        sem_init(queue_mutex, 1, 1) == -1 || \
+        sem_init(mutex, 1, 1) == -1 || \
         sem_init(hydro_queue, 1, 0) == -1 || \
         sem_init(oxy_queue, 1, 0) == -1 || \
         sem_init(barrier, 1, 0) == -1 || \
         sem_init(barrier_mutex, 1, 1) == -1 || \
-        sem_init(protect_mutex, 1, 1) == -1
+        sem_init(protect_mutex, 1, 1) == -1 || \
+        sem_init(queue_mutex, 1, 1) == -1
     ) {
         fprintf(stderr, "Chyba pri inicializaci semaforu");
         return false;
@@ -119,12 +120,17 @@ void oxy_func(int p_num, args_t args) {
     //Process started print
     srand(time(NULL) *getpid());
     sem_wait(print_mutex);
-    printf("%d: O %d: started\n", ++(*line_counter), p_num + 1);
+    fprintf(file, "%d: O %d: started\n", ++(*line_counter), p_num + 1);
+    fflush(file);
     sem_post(print_mutex);
 
     sem_wait(queue_mutex);
     usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
-    printf("%d: O %d: going to queue\n", ++(*line_counter), p_num + 1);
+    fprintf(file, "%d: O %d: going to queue\n", ++(*line_counter), p_num + 1);
+    fflush(file);
+    sem_post(queue_mutex);
+
+    sem_wait(mutex);
     (*idO)++;
 
     if (*idH >= 2 && *idO >= 1) {
@@ -138,12 +144,13 @@ void oxy_func(int p_num, args_t args) {
 
         sem_wait(print_mutex);
         usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
-        printf("%d: O %d: creating molecule %d\n", ++(*line_counter), p_num + 1, ++(*noM));
+        fprintf(file, "%d: O %d: creating molecule %d\n", ++(*line_counter), p_num + 1, ++(*noM));
+        fflush(file);
         sem_post(print_mutex);
     }
 
     else {
-        sem_post(queue_mutex);
+        sem_post(mutex);
     }
 
     sem_wait(oxy_queue);
@@ -160,7 +167,8 @@ void oxy_func(int p_num, args_t args) {
     sem_post(barrier);
 
     sem_wait(print_mutex);
-        printf("%d: O %d: molecule %d created\n", ++(*line_counter), p_num + 1, (*noM));
+        fprintf(file, "%d: O %d: molecule %d created\n", ++(*line_counter), p_num + 1, (*noM));
+        fflush(file);
     sem_post(print_mutex);
     
     sem_wait(barrier_mutex);
@@ -175,7 +183,7 @@ void oxy_func(int p_num, args_t args) {
     sem_wait(protect_mutex);
     sem_post(protect_mutex);
 
-    sem_post(queue_mutex);
+    sem_post(mutex);
 }
 
 void hydro_func(int p_num, args_t args) {
@@ -183,12 +191,17 @@ void hydro_func(int p_num, args_t args) {
     //Process started print
     srand(time(NULL) *getpid());
     sem_wait(print_mutex);
-    printf("%d: H %d: started\n", ++(*line_counter), p_num + 1);
+    fprintf(file, "%d: H %d: started\n", ++(*line_counter), p_num + 1);
+    fflush(file);
     sem_post(print_mutex);
 
     sem_wait(queue_mutex);
     usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
-    printf("%d: H %d: going to queue\n", ++(*line_counter), p_num + 1);
+    fprintf(file, "%d: H %d: going to queue\n", ++(*line_counter), p_num + 1);
+    fflush(file);
+    sem_post(queue_mutex);
+
+    sem_wait(mutex);
     (*idH)++;
 
     if (*idH >= 2 && *idO >= 1) {
@@ -202,12 +215,13 @@ void hydro_func(int p_num, args_t args) {
 
         sem_wait(print_mutex);
         usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
-        printf("%d: H %d: creating molecule %d\n", ++(*line_counter), p_num + 1, ++(*noM));
+        fprintf(file, "%d: H %d: creating molecule %d\n", ++(*line_counter), p_num + 1, ++(*noM));
+        fflush(file);
         sem_post(print_mutex);
     }
 
     else {
-        sem_post(queue_mutex);
+        sem_post(mutex);
     }
 
     sem_wait(hydro_queue);
@@ -224,7 +238,8 @@ void hydro_func(int p_num, args_t args) {
     sem_post(barrier);
 
     sem_wait(print_mutex);
-        printf("%d: H %d: molecule %d created\n", ++(*line_counter), p_num + 1, (*noM));
+        fprintf(file, "%d: H %d: molecule %d created\n", ++(*line_counter), p_num + 1, (*noM));
+        fflush(file);
     sem_post(print_mutex);
 
     sem_wait(barrier_mutex);
@@ -246,12 +261,13 @@ bool sem_dtor() {
     // Destroys semaphores
     if (
         sem_destroy(print_mutex) == -1 || \
-        sem_destroy(queue_mutex) == -1 || \
+        sem_destroy(mutex) == -1 || \
         sem_destroy(hydro_queue) == -1 || \
         sem_destroy(oxy_queue) == -1 || \
         sem_destroy(barrier) == -1 || \
         sem_destroy(barrier_mutex) == -1 || \
-        sem_destroy(protect_mutex) == -1
+        sem_destroy(protect_mutex) == -1 || \
+        sem_destroy(queue_mutex) == -1
     ) {
         fprintf(stderr, "Chyba pri uvolnovani semaforu");
         return false;

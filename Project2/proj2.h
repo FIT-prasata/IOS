@@ -22,6 +22,7 @@
 #include <sys/shm.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <stdarg.h>
 
 // TYPEDEFS, STRUCTS AND DEFINES
 typedef struct args {
@@ -50,7 +51,7 @@ int shared_line_counter, shared_idO, shared_idH, shared_noM, shared_atom_counter
 int *line_counter, *idO, *idH, *noM, *atom_counter;
 
 // SEMAPHORES
-sem_t *print_mutex, *queue_mutex, *hydro_queue, *oxy_queue, *barrier, *barrier_mutex, *protect_mutex;
+sem_t *print_mutex, *mutex, *hydro_queue, *oxy_queue, *barrier, *barrier_mutex, *protect_mutex, *queue_mutex;
 
 FILE *file;
 
