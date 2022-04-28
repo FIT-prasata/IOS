@@ -26,14 +26,19 @@
 
 // TYPEDEFS, STRUCTS AND DEFINES
 typedef struct args {
-    int NO;
-    int NH;
-    int TI;
-    int TB;
+    long NO;
+    long NH;
+    long TI;
+    long TB;
 } args_t;
 
+// EXIT STATES
 #define ERROR 1
 #define SUCCESS 0
+#define FAILED -1
+
+// TESTING
+#define UNUSED(x) (void) (x) 
 
 // FUNCTION PROTOTYPES
 bool process_input(int argc, const char **argv, args_t *args);
@@ -43,18 +48,41 @@ void oxy_func(int p_num, args_t args);
 void hydro_func(int p_num, args_t args);
 bool sem_dtor();
 bool shm_dtor();
+void count_max_molecules(args_t args);
 
-// SHARED MEMORY VARIABLES 
-int shared_line_counter, shared_idO, shared_idH, shared_noM, shared_atom_counter;
-
-// VARIABLES
-int *line_counter, *idO, *idH, *noM, *atom_counter;
-
-// SEMAPHORES
-sem_t *print_mutex, *mutex, *hydro_queue, *oxy_queue, *barrier, *barrier_mutex, *protect_mutex, *queue_mutex;
-
+// FILE POINTER
 FILE *file;
 
-#define UNUSED(x) (void) (x) 
+// SHARED MEMORY VARIABLES 
+int shared_line_counter, \
+    shared_idO, \
+    shared_idH, \
+    shared_noM, \
+    shared_atom_counter, \
+    shared_is_mergeable, \
+    shared_oxy_left, \
+    shared_hydro_left, \
+    shared_max_molecules;
+
+// VARIABLES
+int *line_counter, \
+    *idO, \
+    *idH, \
+    *noM, \
+    *atom_counter, \
+    *is_mergeable, \
+    *oxy_left, \
+    *hydro_left, \
+    *max_molecules;
+
+// SEMAPHORES
+sem_t *print_mutex, \
+    *mutex, \
+    *hydro_queue, \
+    *oxy_queue, \
+    *barrier, \
+    *barrier_mutex, \
+    *second_barrier, \
+    *queue_mutex;
 
 #endif
