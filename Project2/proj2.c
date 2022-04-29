@@ -195,15 +195,6 @@ void oxy_func(int p_num, args_t args) {
         // Release one O atom from the front of a queue
         sem_post(oxy_queue);
         (*idO)--;
-
-        // Creating molecule state print
-        sem_wait(print_mutex);
-            fprintf(file, "%d: O %d: creating molecule %d\n", ++(*line_counter), p_num + 1, ++(*noM));
-            fflush(file);
-        sem_post(print_mutex);
-
-        // Sleep after creating molecule
-        usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
     }
 
     else {
@@ -222,6 +213,15 @@ void oxy_func(int p_num, args_t args) {
         exit(SUCCESS);
     }
 
+    // Creating molecule state print
+    sem_wait(print_mutex);
+        fprintf(file, "%d: O %d: creating molecule %d\n", ++(*line_counter), p_num + 1, (*noM)+1);
+        fflush(file);
+    sem_post(print_mutex);
+
+    // Sleep after creating molecule
+    usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
+
     // Lock the second and unlock the first barrier
     sem_wait(barrier_mutex);
         (*atom_counter)++;
@@ -236,11 +236,7 @@ void oxy_func(int p_num, args_t args) {
     sem_wait(barrier);
     sem_post(barrier);
 
-    // Print molecule created state
-    sem_wait(print_mutex);
-        fprintf(file, "%d: O %d: molecule %d created\n", ++(*line_counter), p_num + 1, (*noM));
-        fflush(file);
-    sem_post(print_mutex);
+    (*noM)++;
     
     //  Lock the first and unlock the second barrier
     sem_wait(barrier_mutex);
@@ -255,6 +251,12 @@ void oxy_func(int p_num, args_t args) {
     // Second turnstile
     sem_wait(second_barrier);
     sem_post(second_barrier);
+
+    // Print molecule created state
+    sem_wait(print_mutex);
+        fprintf(file, "%d: O %d: molecule %d created\n", ++(*line_counter), p_num + 1, *noM);
+        fflush(file);
+    sem_post(print_mutex);
 
     // Release another atom to the hydro or oxy queue
     sem_post(mutex);
@@ -317,15 +319,6 @@ void hydro_func(int p_num, args_t args) {
         // Release one O atom from the front of a queue
         sem_post(oxy_queue);
         (*idO)--;
-
-        // Creating molecule state print
-        sem_wait(print_mutex);
-            fprintf(file, "%d: H %d: creating molecule %d\n", ++(*line_counter), p_num + 1, ++(*noM));
-            fflush(file);
-        sem_post(print_mutex);
-
-        // Sleep after creating molecule
-        usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
     }
 
     else {
@@ -344,6 +337,12 @@ void hydro_func(int p_num, args_t args) {
         exit(SUCCESS);
     }
 
+    // Creating molecule state print
+        sem_wait(print_mutex);
+            fprintf(file, "%d: H %d: creating molecule %d\n", ++(*line_counter), p_num + 1, (*noM)+1);
+            fflush(file);
+        sem_post(print_mutex);
+
     // Lock the second and unlock the first barrier
     sem_wait(barrier_mutex);
         (*atom_counter)++;
@@ -357,12 +356,6 @@ void hydro_func(int p_num, args_t args) {
     // First turnstile
     sem_wait(barrier);
     sem_post(barrier);
-
-    // Molecule created state print
-    sem_wait(print_mutex);
-        fprintf(file, "%d: H %d: molecule %d created\n", ++(*line_counter), p_num + 1, (*noM));
-        fflush(file);
-    sem_post(print_mutex);
     
     // Lock the first and unlock the second barrier
     sem_wait(barrier_mutex);
@@ -377,6 +370,12 @@ void hydro_func(int p_num, args_t args) {
     // Second turnstile
     sem_wait(second_barrier);
     sem_post(second_barrier);
+
+    // Molecule created state print
+    sem_wait(print_mutex);
+        fprintf(file, "%d: H %d: molecule %d created\n", ++(*line_counter), p_num + 1, *noM);
+        fflush(file);
+    sem_post(print_mutex);
 }
 
 // Semaphores destructor
