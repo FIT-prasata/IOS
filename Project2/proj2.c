@@ -166,27 +166,27 @@ bool shm_ctor() {
 void oxy_func(int p_num, args_t args) {
 
     // Generate random seed
-    srand(time(NULL) *getpid());
+    srand(getpid());
 
     // Started state print
     sem_wait(print_mutex);
-        fprintf(file, "%d: O %d: started\n", ++(*line_counter), p_num + 1);
+        fprintf(file, "%d: O %d: started\n", ++(*line_counter), p_num);
         fflush(file);
     sem_post(print_mutex);
 
     // Sleep before joining queue
     usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
 
-    // Going to queue state print
-    sem_wait(queue_mutex);
-        fprintf(file, "%d: O %d: going to queue\n", ++(*line_counter), p_num + 1);
-        fflush(file);
-    sem_post(queue_mutex);
-
     // Main shared mutex
     sem_wait(mutex);
 
     (*idO)++;
+
+    // Going to queue state print
+    sem_wait(queue_mutex);
+        fprintf(file, "%d: O %d: going to queue\n", ++(*line_counter), p_num);
+        fflush(file);
+    sem_post(queue_mutex);
 
     // Check the queue for two H and one O atoms
     if (*idH >= 2 && *idO >= 1) {
@@ -208,19 +208,26 @@ void oxy_func(int p_num, args_t args) {
         sem_post(mutex);
     }
 
+    // Check if new molecule can be created
+    if (*is_mergeable == 0) {
+        fprintf(file, "%d: O %d: not enough H\n", ++(*line_counter) , p_num);
+        fflush(file);
+        exit(SUCCESS);
+    }
+
     // Queue of oxygens
     sem_wait(oxy_queue);
 
     // Check if new molecule can be created
     if (*is_mergeable == 0) {
-        fprintf(file, "%d: O %d: not enough H\n", ++(*line_counter) , p_num + 1);
+        fprintf(file, "%d: O %d: not enough H\n", ++(*line_counter) , p_num);
         fflush(file);
         exit(SUCCESS);
     }
 
     // Creating molecule state print
     sem_wait(print_mutex);
-        fprintf(file, "%d: O %d: creating molecule %d\n", ++(*line_counter), p_num + 1, (*noM)+1);
+        fprintf(file, "%d: O %d: creating molecule %d\n", ++(*line_counter), p_num, (*noM)+1);
         fflush(file);
     sem_post(print_mutex);
 
@@ -241,7 +248,9 @@ void oxy_func(int p_num, args_t args) {
     sem_wait(barrier);
     sem_post(barrier);
 
-    (*noM)++;
+    sem_wait(print_mutex);
+        (*noM)++;
+    sem_post(print_mutex);
     
     //  Lock the first and unlock the second barrier
     sem_wait(barrier_mutex);
@@ -259,7 +268,7 @@ void oxy_func(int p_num, args_t args) {
 
     // Print molecule created state
     sem_wait(print_mutex);
-        fprintf(file, "%d: O %d: molecule %d created\n", ++(*line_counter), p_num + 1, *noM);
+        fprintf(file, "%d: O %d: molecule %d created\n", ++(*line_counter), p_num, *noM);
         fflush(file);
     sem_post(print_mutex);
 
@@ -292,27 +301,27 @@ void oxy_func(int p_num, args_t args) {
 void hydro_func(int p_num, args_t args) {
 
     // Generate random seed
-    srand(time(NULL) *getpid());
+    srand(getpid());
 
     // Started state print
     sem_wait(print_mutex);
-        fprintf(file, "%d: H %d: started\n", ++(*line_counter), p_num + 1);
+        fprintf(file, "%d: H %d: started\n", ++(*line_counter), p_num);
         fflush(file);
     sem_post(print_mutex);
 
     // Sleep before joining queue
     usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
 
-    // Going to queue state print
-    sem_wait(queue_mutex);
-        fprintf(file, "%d: H %d: going to queue\n", ++(*line_counter), p_num + 1);
-        fflush(file);
-    sem_post(queue_mutex);
-
     // Main shared mutex
     sem_wait(mutex);
     
     (*idH)++;
+
+    // Going to queue state print
+    sem_wait(queue_mutex);
+        fprintf(file, "%d: H %d: going to queue\n", ++(*line_counter), p_num);
+        fflush(file);
+    sem_post(queue_mutex);
 
     // Check the queue for two H and one O atoms
     if (*idH >= 2 && *idO >= 1) {
@@ -334,21 +343,28 @@ void hydro_func(int p_num, args_t args) {
         sem_post(mutex);
     }
 
+    // Check if new molecule can be created
+    if (*is_mergeable == 0) {
+        fprintf(file, "%d: H %d: not enough O or H\n", ++(*line_counter), p_num);
+        fflush(file);
+        exit(SUCCESS);
+    }
+
     // Queue of hydrogens
     sem_wait(hydro_queue);
 
     // Check if new molecule can be created
     if (*is_mergeable == 0) {
-        fprintf(file, "%d: H %d: not enough O or H\n", ++(*line_counter), p_num + 1);
+        fprintf(file, "%d: H %d: not enough O or H\n", ++(*line_counter), p_num);
         fflush(file);
         exit(SUCCESS);
     }
 
     // Creating molecule state print
-        sem_wait(print_mutex);
-            fprintf(file, "%d: H %d: creating molecule %d\n", ++(*line_counter), p_num + 1, (*noM)+1);
-            fflush(file);
-        sem_post(print_mutex);
+    sem_wait(print_mutex);
+        fprintf(file, "%d: H %d: creating molecule %d\n", ++(*line_counter), p_num, (*noM)+1);
+        fflush(file);
+    sem_post(print_mutex);
 
     // Lock the second and unlock the first barrier
     sem_wait(barrier_mutex);
@@ -380,7 +396,7 @@ void hydro_func(int p_num, args_t args) {
 
     // Molecule created state print
     sem_wait(print_mutex);
-        fprintf(file, "%d: H %d: molecule %d created\n", ++(*line_counter), p_num + 1, *noM);
+        fprintf(file, "%d: H %d: molecule %d created\n", ++(*line_counter), p_num, *noM);
         fflush(file);
     sem_post(print_mutex);
 
@@ -466,7 +482,7 @@ int main(int argc, const char **argv) {
     for (int i = 0; i < args.NO; i++) {
         oxy = fork();
         if (oxy == 0) {
-            oxy_func(i, args);
+            oxy_func(i + 1, args);
         }
         oxy_childs[i] = oxy;
     }
@@ -474,7 +490,7 @@ int main(int argc, const char **argv) {
     for (int i = 0; i < args.NH; i++) {
         hydro = fork();
         if (hydro == 0) {
-            hydro_func(i, args);
+            hydro_func(i + 1, args);
         }
         hydro_childs[i] = hydro;
     }
@@ -495,6 +511,5 @@ int main(int argc, const char **argv) {
         exit(ERROR);
     }
     fclose(file);
-
     return 0;
 }
