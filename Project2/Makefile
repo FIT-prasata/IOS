@@ -6,6 +6,8 @@ all: proj2
 run: proj2
 	./proj2 6 11 0 0
 	cat proj2.out
+	./proj2 10 21 0 0
+	cat proj2.out
 
 # GENERATE .o FILES
 
@@ -20,4 +22,4 @@ proj2: proj2.o
 # DELETE ALL .o FILES AND EXECUTABLE
 
 clean:
-	rm *.o proj2 proj2.out
+	rm *.o *.out* proj2

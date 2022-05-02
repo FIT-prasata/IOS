@@ -6,14 +6,12 @@
 // Compiled: gcc (GCC) 9.2.0
 // Git repository: https://github.com/lukaszavadil1/IOS
 
-// Little book of semaphores recommended :)
-
-// TOTAL CAFFEINE CONSUMED - 1,08g
-// HOPELESS CRYING IN THE SHOWER COUNTER - 5x
+// TOTAL CAFFEINE CONSUMED - 3,32g
+// HOPELESS CRYING IN THE SHOWER COUNTER - 7x
 // PROCESSES THAT ESCAPED TO THE WILD AND WILL NEVER BE FOUND - way too many
 // SEMAPHORES THAT WILL NEVER SIGNAL AGAIN - dozens
 // SHARED MEMORY COMPLETELY LOST - a lot
-// DEADLOCKS EXPLORED - 8
+// DEADLOCKS EXPLORED - 9
 
 // LOCAL INCLUDES
 #include "proj2.h"
@@ -59,7 +57,9 @@ bool process_input(int argc, const char **argv, args_t *args) {
 // Calculates maximum number of possible molecules and remaining atoms 
 void count_max_molecules(args_t args) {
 
-    if (args.NO >= 1 && args.NH >= 2) {
+    // Check if at least one molecule can be created
+    if (args.NO > 0 && args.NH > 1) {
+
         // How many molecules can be created
         if (args.NO > (args.NH / 2)) {
             *max_molecules = args.NH / 2;
@@ -72,9 +72,10 @@ void count_max_molecules(args_t args) {
         *max_molecules = 0;
         *is_mergeable = 0;
     }
+
     // Number of atoms that will not be merged
     *hydro_left = args.NH - (*max_molecules * 2);
-    *oxy_left = args.NO - *max_molecules;
+    *oxy_left = args.NO - (*max_molecules);
 }
 
 // Semaphores init
@@ -86,9 +87,9 @@ bool sem_ctor() {
         (mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
         (hydro_queue = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
         (oxy_queue = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
-        (barrier = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (first_turn = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
         (barrier_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
-        (second_barrier = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
+        (second_turn = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED || \
         (queue_mutex = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, 0, 0)) == MAP_FAILED
     ) {
         fprintf(stderr, "Chyba pri mapovani pameti pro semafor");
@@ -101,9 +102,9 @@ bool sem_ctor() {
         sem_init(mutex, 1, 1) == FAILED || \
         sem_init(hydro_queue, 1, 0) == FAILED || \
         sem_init(oxy_queue, 1, 0) == FAILED || \
-        sem_init(barrier, 1, 0) == FAILED || \
+        sem_init(first_turn, 1, 0) == FAILED || \
         sem_init(barrier_mutex, 1, 1) == FAILED || \
-        sem_init(second_barrier, 1, 1) == FAILED || \
+        sem_init(second_turn, 1, 1) == FAILED || \
         sem_init(queue_mutex, 1, 1) == FAILED
     ) {
         fprintf(stderr, "Chyba pri inicializaci semaforu");
@@ -166,16 +167,17 @@ bool shm_ctor() {
 void oxy_func(int p_num, args_t args) {
 
     // Generate random seed
-    srand(getpid());
+    srand(time(NULL) * getpid());
 
     // Started state print
     sem_wait(print_mutex);
-        fprintf(file, "%d: O %d: started\n", ++(*line_counter), p_num);
+        (*line_counter)++;
+        fprintf(file, "%d: O %d: started\n", *line_counter, p_num);
         fflush(file);
     sem_post(print_mutex);
 
     // Sleep before joining queue
-    usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
+    usleep(rand() % (args.TI + 1) * 1000);
 
     // Main shared mutex
     sem_wait(mutex);
@@ -184,12 +186,13 @@ void oxy_func(int p_num, args_t args) {
 
     // Going to queue state print
     sem_wait(queue_mutex);
-        fprintf(file, "%d: O %d: going to queue\n", ++(*line_counter), p_num);
+        (*line_counter)++;
+        fprintf(file, "%d: O %d: going to queue\n", *line_counter, p_num);
         fflush(file);
     sem_post(queue_mutex);
 
-    // Check the queue for two H and one O atoms
-    if (*idH >= 2 && *idO >= 1) {
+    // Check the queue for two H atoms
+    if (*idH >= 2) {
 
         // Release two H atoms from the front of a queue
         sem_post(hydro_queue);
@@ -208,10 +211,13 @@ void oxy_func(int p_num, args_t args) {
         sem_post(mutex);
     }
 
-    // Check if new molecule can be created
+    // Check if at least one molecule can be created
     if (*is_mergeable == 0) {
-        fprintf(file, "%d: O %d: not enough H\n", ++(*line_counter) , p_num);
-        fflush(file);
+        sem_wait(print_mutex);
+            (*line_counter)++;
+            fprintf(file, "%d: O %d: not enough H\n", *line_counter, p_num);
+            fflush(file);
+        sem_post(print_mutex);
         exit(SUCCESS);
     }
 
@@ -220,55 +226,62 @@ void oxy_func(int p_num, args_t args) {
 
     // Check if new molecule can be created
     if (*is_mergeable == 0) {
-        fprintf(file, "%d: O %d: not enough H\n", ++(*line_counter) , p_num);
-        fflush(file);
+        sem_wait(print_mutex);
+            (*line_counter)++;
+            fprintf(file, "%d: O %d: not enough H\n", *line_counter, p_num);
+            fflush(file);
+        sem_post(print_mutex);
         exit(SUCCESS);
     }
 
     // Creating molecule state print
     sem_wait(print_mutex);
-        fprintf(file, "%d: O %d: creating molecule %d\n", ++(*line_counter), p_num, (*noM)+1);
+        (*line_counter)++;
+        fprintf(file, "%d: O %d: creating molecule %d\n", *line_counter, p_num, (*noM)+1);
         fflush(file);
     sem_post(print_mutex);
 
     // Sleep after creating molecule
-    usleep((rand() % (args.TB + 1 - 0) + 0) * 1000);
+    usleep(rand() % (args.TB + 1) * 1000);
 
-    // Lock the second and unlock the first barrier
+    // Reusable barrier from The Little Book of Semaphores
+    // Lock the second and unlock the first turn
     sem_wait(barrier_mutex);
         (*atom_counter)++;
 
         if (*atom_counter == 3){
-            sem_wait(second_barrier);
-            sem_post(barrier);
+            sem_wait(second_turn);
+            sem_post(first_turn);
         }
     sem_post(barrier_mutex);
 
     // First turnstile
-    sem_wait(barrier);
-    sem_post(barrier);
+    sem_wait(first_turn);
+    sem_post(first_turn);
 
+    // Increment mutex
     sem_wait(print_mutex);
         (*noM)++;
     sem_post(print_mutex);
     
-    //  Lock the first and unlock the second barrier
+    //  Lock the first and unlock the second turn
     sem_wait(barrier_mutex);
         (*atom_counter)--;
 
         if (*atom_counter == 0){
-            sem_wait(barrier);
-            sem_post(second_barrier);
+            sem_wait(first_turn);
+            sem_post(second_turn);
         }
     sem_post(barrier_mutex);
 
     // Second turnstile
-    sem_wait(second_barrier);
-    sem_post(second_barrier);
+    sem_wait(second_turn);
+    sem_post(second_turn);
 
     // Print molecule created state
     sem_wait(print_mutex);
-        fprintf(file, "%d: O %d: molecule %d created\n", ++(*line_counter), p_num, *noM);
+        (*line_counter)++;
+        fprintf(file, "%d: O %d: molecule %d created\n", *line_counter, p_num, *noM);
         fflush(file);
     sem_post(print_mutex);
 
@@ -301,16 +314,17 @@ void oxy_func(int p_num, args_t args) {
 void hydro_func(int p_num, args_t args) {
 
     // Generate random seed
-    srand(getpid());
+    srand(time(NULL) * getpid());
 
     // Started state print
     sem_wait(print_mutex);
-        fprintf(file, "%d: H %d: started\n", ++(*line_counter), p_num);
+        (*line_counter)++;
+        fprintf(file, "%d: H %d: started\n", *line_counter, p_num);
         fflush(file);
     sem_post(print_mutex);
 
     // Sleep before joining queue
-    usleep((rand() % (args.TI + 1 - 0) + 0) * 1000);
+    usleep(rand() % (args.TI + 1) * 1000);
 
     // Main shared mutex
     sem_wait(mutex);
@@ -319,7 +333,8 @@ void hydro_func(int p_num, args_t args) {
 
     // Going to queue state print
     sem_wait(queue_mutex);
-        fprintf(file, "%d: H %d: going to queue\n", ++(*line_counter), p_num);
+        (*line_counter)++;
+        fprintf(file, "%d: H %d: going to queue\n", *line_counter, p_num);
         fflush(file);
     sem_post(queue_mutex);
 
@@ -343,10 +358,13 @@ void hydro_func(int p_num, args_t args) {
         sem_post(mutex);
     }
 
-    // Check if new molecule can be created
+    // Check if at least one molecule can be created
     if (*is_mergeable == 0) {
-        fprintf(file, "%d: H %d: not enough O or H\n", ++(*line_counter), p_num);
-        fflush(file);
+        sem_wait(print_mutex);
+            (*line_counter)++;
+            fprintf(file, "%d: H %d: not enough O or H\n", *line_counter, p_num);
+            fflush(file);
+        sem_post(print_mutex);
         exit(SUCCESS);
     }
 
@@ -355,48 +373,53 @@ void hydro_func(int p_num, args_t args) {
 
     // Check if new molecule can be created
     if (*is_mergeable == 0) {
-        fprintf(file, "%d: H %d: not enough O or H\n", ++(*line_counter), p_num);
-        fflush(file);
+        sem_wait(print_mutex);
+            (*line_counter)++;
+            fprintf(file, "%d: H %d: not enough O or H\n", *line_counter, p_num);
+            fflush(file);
+        sem_post(print_mutex);
         exit(SUCCESS);
     }
 
     // Creating molecule state print
     sem_wait(print_mutex);
-        fprintf(file, "%d: H %d: creating molecule %d\n", ++(*line_counter), p_num, (*noM)+1);
+        (*line_counter)++;    
+        fprintf(file, "%d: H %d: creating molecule %d\n", *line_counter, p_num, (*noM)+1);
         fflush(file);
     sem_post(print_mutex);
 
-    // Lock the second and unlock the first barrier
+    // Lock the second and unlock the first turn
     sem_wait(barrier_mutex);
         (*atom_counter)++;
         
         if (*atom_counter == 3){
-            sem_wait(second_barrier);
-            sem_post(barrier);
+            sem_wait(second_turn);
+            sem_post(first_turn);
         }
     sem_post(barrier_mutex);
 
     // First turnstile
-    sem_wait(barrier);
-    sem_post(barrier);
+    sem_wait(first_turn);
+    sem_post(first_turn);
     
-    // Lock the first and unlock the second barrier
+    // Lock the first and unlock the second turn
     sem_wait(barrier_mutex);
         (*atom_counter)--;
 
         if (*atom_counter == 0){
-            sem_wait(barrier);
-            sem_post(second_barrier);
+            sem_wait(first_turn);
+            sem_post(second_turn);
         }
     sem_post(barrier_mutex);
 
     // Second turnstile
-    sem_wait(second_barrier);
-    sem_post(second_barrier);
+    sem_wait(second_turn);
+    sem_post(second_turn);
 
     // Molecule created state print
     sem_wait(print_mutex);
-        fprintf(file, "%d: H %d: molecule %d created\n", ++(*line_counter), p_num, *noM);
+        (*line_counter)++;
+        fprintf(file, "%d: H %d: molecule %d created\n", *line_counter, p_num, *noM);
         fflush(file);
     sem_post(print_mutex);
 
@@ -412,9 +435,9 @@ bool sem_dtor() {
         sem_destroy(mutex) == FAILED || \
         sem_destroy(hydro_queue) == FAILED || \
         sem_destroy(oxy_queue) == FAILED || \
-        sem_destroy(barrier) == FAILED || \
+        sem_destroy(first_turn) == FAILED || \
         sem_destroy(barrier_mutex) == FAILED || \
-        sem_destroy(second_barrier) == FAILED || \
+        sem_destroy(second_turn) == FAILED || \
         sem_destroy(queue_mutex) == FAILED
     ) {
         fprintf(stderr, "Chyba pri uvolnovani semaforu");
@@ -478,21 +501,36 @@ int main(int argc, const char **argv) {
 
     count_max_molecules(args);
 
-    // Magic
+    // Oxygen forking
     for (int i = 0; i < args.NO; i++) {
         oxy = fork();
         if (oxy == 0) {
             oxy_func(i + 1, args);
         }
-        oxy_childs[i] = oxy;
+        else if (oxy == -1) {
+            fprintf(stderr, "Chyba oxy forku");
+            fclose(file);
+            exit(ERROR);
+        }
+        else {
+            oxy_childs[i] = oxy;
+        }
     }
 
+    // Hydrogen forking
     for (int i = 0; i < args.NH; i++) {
         hydro = fork();
         if (hydro == 0) {
             hydro_func(i + 1, args);
         }
-        hydro_childs[i] = hydro;
+        else if (hydro == -1) {
+            fprintf(stderr, "Chyba hydro forku");
+            fclose(file);
+            exit(ERROR);
+        }
+        else {
+            hydro_childs[i] = hydro;
+        }
     }
 
     // Wait for oxy childs
@@ -511,5 +549,6 @@ int main(int argc, const char **argv) {
         exit(ERROR);
     }
     fclose(file);
+    
     return 0;
 }

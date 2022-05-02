@@ -80,9 +80,9 @@ sem_t *print_mutex, \
     *mutex, \
     *hydro_queue, \
     *oxy_queue, \
-    *barrier, \
+    *first_turn, \
     *barrier_mutex, \
-    *second_barrier, \
+    *second_turn, \
     *queue_mutex;
 
 #endif
