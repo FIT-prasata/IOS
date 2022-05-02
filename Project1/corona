@@ -216,7 +216,7 @@ function filter_input() {
 				print$0
                             }
 			    else {
-				print(substr($0, 2, length($0)))
+				print$0
 		 	    }
                         }'
                     )

@@ -59,14 +59,19 @@ bool process_input(int argc, const char **argv, args_t *args) {
 // Calculates maximum number of possible molecules and remaining atoms 
 void count_max_molecules(args_t args) {
 
-    // How many molecules can be created
-    if (args.NO > (args.NH / 2)) {
-        *max_molecules = args.NH / 2;
+    if (args.NO >= 1 && args.NH >= 2) {
+        // How many molecules can be created
+        if (args.NO > (args.NH / 2)) {
+            *max_molecules = args.NH / 2;
+        }
+        else {
+            *max_molecules = args.NO;
+        }
     }
     else {
-        *max_molecules = args.NO;
+        *max_molecules = 0;
+        *is_mergeable = 0;
     }
-
     // Number of atoms that will not be merged
     *hydro_left = args.NH - (*max_molecules * 2);
     *oxy_left = args.NO - *max_molecules;
@@ -279,6 +284,8 @@ void oxy_func(int p_num, args_t args) {
             sem_post(hydro_queue);
         }
     }
+
+    exit(SUCCESS);
 }
 
 // Hydrogen process function
@@ -376,6 +383,8 @@ void hydro_func(int p_num, args_t args) {
         fprintf(file, "%d: H %d: molecule %d created\n", ++(*line_counter), p_num + 1, *noM);
         fflush(file);
     sem_post(print_mutex);
+
+    exit(SUCCESS);
 }
 
 // Semaphores destructor
@@ -435,7 +444,7 @@ int main(int argc, const char **argv) {
     // Arguments validation
     if (process_input(argc, argv, &args) == false) {exit(ERROR); }
 
-    pid_t init, oxy, hydro;
+    pid_t oxy, hydro;
     pid_t oxy_childs[args.NO], hydro_childs[args.NH];
 
     // File validation
@@ -454,59 +463,37 @@ int main(int argc, const char **argv) {
     count_max_molecules(args);
 
     // Magic
-    init = fork();
-    if (init == 0) {
-        for (int i = 0; i < args.NO; i++) {
-            oxy = fork();
-            if (oxy == 0) {
-                oxy_func(i, args);
-                exit(SUCCESS);
-            }
-            else if (oxy == -1) {
-                fprintf(stderr, "Chyba oxy forku");
-                fclose(file);
-                exit(ERROR);
-            }
-            else {
-                oxy_childs[i] = oxy;
-            }
+    for (int i = 0; i < args.NO; i++) {
+        oxy = fork();
+        if (oxy == 0) {
+            oxy_func(i, args);
         }
-        
-        // Wait for oxy childs
-        for (int i = 0; i < args.NO; i++) {
-            waitpid(oxy_childs[i], NULL, 0);
-        }
+        oxy_childs[i] = oxy;
     }
-    else if (init == -1) {
-        fprintf(stderr, "Chyba init forku");
-        fclose(file);
-        exit(ERROR);
-    }
-    else {
-        for (int i = 0; i < args.NH; i++) {
-            hydro = fork();
-            if (hydro == 0) {
-                hydro_func(i, args);
-                exit(SUCCESS);
-            }
-            else if (hydro == -1) {
-                fprintf(stderr, "Chyba hydro forku");
-                fclose(file);
-                exit(ERROR);
-            }
-            else {
-                hydro_childs[i] = hydro;
-            }
-        }
 
-        // Wait for hydro childs
-        for (int i = 0; i < args.NH; i++) {
-            waitpid(hydro_childs[i], NULL, 0);
+    for (int i = 0; i < args.NH; i++) {
+        hydro = fork();
+        if (hydro == 0) {
+            hydro_func(i, args);
         }
+        hydro_childs[i] = hydro;
+    }
+
+    // Wait for oxy childs
+    for (int i = 0; i < args.NO; i++) {
+        waitpid(oxy_childs[i], NULL, 0);
+    }
+
+    // Wait for hydro childs
+    for (int i = 0; i < args.NH; i++) {
+        waitpid(hydro_childs[i], NULL, 0);
     }
 
     // Cleaning up semaphores and shared memory
-    if ((sem_dtor() == false) || (shm_dtor() == false)) { exit(ERROR); }
+    if ((sem_dtor() == false) || (shm_dtor() == false)) { 
+        fclose(file);
+        exit(ERROR);
+    }
     fclose(file);
 
     return 0;
